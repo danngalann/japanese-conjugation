@@ -9,5 +9,5 @@ function normalize(value: string) {
 export function accepts(answer: string, verb: Verb, target: Form): boolean {
   const input = normalize(toKana(normalize(answer)))
   return input === normalize(conjugate(verb, target).result) ||
-    input === normalize(conjugateReading(verb, target).result)
+    input === normalize(conjugateReading(verb, target))
 }

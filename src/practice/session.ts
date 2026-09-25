@@ -26,6 +26,13 @@ export const emptyProgress = (): Progress => ({
 
 const storageKey = 'japanese-conjugation-progress-v1'
 
+function validScores(value: object): boolean {
+  return Object.values(value).every((score) =>
+    typeof score === 'object' && score !== null &&
+    Number.isSafeInteger(score.attempts) && score.attempts > 0 &&
+    Number.isSafeInteger(score.correct) && score.correct >= 0 && score.correct <= score.attempts)
+}
+
 export function loadProgress(): Progress {
   try {
     const stored = localStorage.getItem(storageKey)
@@ -34,11 +41,12 @@ export function loadProgress(): Progress {
     if (
       typeof value !== 'object' || value === null ||
       !('version' in value) || value.version !== 1 ||
-      !('total' in value) || typeof value.total !== 'number' ||
-      !('streak' in value) || typeof value.streak !== 'number' ||
+      !('total' in value) || typeof value.total !== 'number' || !Number.isSafeInteger(value.total) || value.total < 0 ||
+      !('streak' in value) || typeof value.streak !== 'number' || !Number.isSafeInteger(value.streak) || value.streak < 0 ||
       !('bestStreak' in value) || typeof value.bestStreak !== 'number' ||
-      !('verbs' in value) || typeof value.verbs !== 'object' || value.verbs === null ||
-      !('rules' in value) || typeof value.rules !== 'object' || value.rules === null
+      !Number.isSafeInteger(value.bestStreak) || value.bestStreak < value.streak ||
+      !('verbs' in value) || typeof value.verbs !== 'object' || value.verbs === null || !validScores(value.verbs) ||
+      !('rules' in value) || typeof value.rules !== 'object' || value.rules === null || !validScores(value.rules)
     ) throw new Error('Invalid saved practice progress')
     return value as Progress
   } catch (error) {

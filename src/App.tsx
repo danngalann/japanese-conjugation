@@ -16,6 +16,7 @@ const classNames: Record<Verb['class'], string> = {
   suru: 'する · Irregular', kuru: '来る · Irregular',
 }
 const formLabel = (form: Form) => FORMS.find((item) => item.id === form)?.label ?? form
+const ruleForm = (source: Form, target: Form) => target === 'dictionary' ? source : target
 
 function normalize(value: string) {
   return value.normalize('NFKC').trim().replace(/\s+/g, '')
@@ -24,7 +25,7 @@ function normalize(value: string) {
 function Transformation({ verb, form }: { verb: Verb; form: Form }) {
   const data = conjugate(verb, form)
   const change = data.transformations[0]
-  const stem = data.segments.find((segment) => segment.role === 'stem')?.text ?? ''
+  const stem = data.segments.stem
   return (
     <div className="transformation" aria-label={`${verb.expression} becomes ${data.result}`}>
       <div className="transformation-line"><span className="stem">{stem}</span><span className="removed">{change.from}</span></div>
@@ -34,6 +35,17 @@ function Transformation({ verb, form }: { verb: Verb; form: Form }) {
       <div className="transformation-line result-word">{data.result}</div>
     </div>
   )
+}
+
+function ReverseTransformation({ verb, source }: { verb: Verb; source: Form }) {
+  const data = conjugate(verb, source)
+  return <div className="transformation" aria-label={`${data.result} becomes ${verb.expression}`}>
+    <div className="transformation-line"><span className="stem">{data.segments.stem}</span><span className="removed">{data.segments.added}</span></div>
+    <span className="step-arrow" aria-hidden="true">↓ <small>{data.segments.added} → {data.segments.removed}</small></span>
+    <div className="transformation-line"><span className="stem">{data.segments.stem}</span><span className="added">{data.segments.removed}</span></div>
+    <span className="step-arrow" aria-hidden="true">↓</span>
+    <div className="transformation-line result-word">{verb.expression}</div>
+  </div>
 }
 
 function App() {
@@ -55,29 +67,32 @@ function App() {
   const pool = useMemo(() => verbs.filter((verb) =>
     (scope === 'all' || verb.level === 'core' || (scope === 'common' && verb.level === 'common')) &&
     (verbClass === 'all' || verb.class === verbClass) &&
-    (!ruleId || conjugate(verb, target).rule.id === ruleId) &&
+    (!ruleId || conjugate(verb, ruleForm(source, target)).rule.id === ruleId) &&
     (!weakOnly || (progress.verbs[verb.id]?.attempts ?? 0) > (progress.verbs[verb.id]?.correct ?? 0) ||
-      (progress.rules[conjugate(verb, target).rule.id]?.attempts ?? 0) >
-      (progress.rules[conjugate(verb, target).rule.id]?.correct ?? 0))
-  ), [scope, verbClass, ruleId, target, weakOnly, progress])
-  const [question, setQuestion] = useState<Verb | undefined>(() => {
-    const selected = pickVerb(verbs.filter((verb) => verb.level === 'core'), 'te', progress, seen.current, recent.current)
-    if (selected) { seen.current.add(selected.id); recent.current.push(selected.id) }
-    return selected
-  })
+      (progress.rules[conjugate(verb, ruleForm(source, target)).rule.id]?.attempts ?? 0) >
+      (progress.rules[conjugate(verb, ruleForm(source, target)).rule.id]?.correct ?? 0))
+  ), [scope, verbClass, ruleId, source, target, weakOnly, progress])
+  const [question, setQuestion] = useState<Verb | undefined>(() =>
+    pickVerb(verbs.filter((verb) => verb.level === 'core'), 'te', progress, new Set(), []))
 
   useEffect(() => { saveProgress(progress) }, [progress])
+  useEffect(() => {
+    if (question) {
+      seen.current.add(question.id)
+      if (recent.current.at(-1) !== question.id) recent.current = [...recent.current.slice(-5), question.id]
+    }
+  }, [question])
   useEffect(() => {
     if (checked === null && page === 'drill') input.current?.focus()
   }, [checked, question, page])
 
-  function next(poolOverride = pool, formOverride = target, stats = progress, reset = false) {
+  function next(poolOverride = pool, formOverride = ruleForm(source, target), stats = progress, reset = false) {
     if (reset) { seen.current.clear(); recent.current = [] }
     const selected = pickVerb(poolOverride, formOverride, stats, seen.current, recent.current)
+    if (selected && seen.current.size >= poolOverride.length) seen.current.clear()
     if (selected) {
-      if (seen.current.size >= poolOverride.length) seen.current.clear()
       seen.current.add(selected.id)
-      recent.current = [...recent.current.slice(-5), selected.id]
+      if (recent.current.at(-1) !== selected.id) recent.current = [...recent.current.slice(-5), selected.id]
     }
     setQuestion(selected)
     setAnswer('')
@@ -88,37 +103,42 @@ function App() {
   function settings(change: Partial<{ scope: Scope; verbClass: ClassFilter; source: Form; target: Form; ruleId: string; weakOnly: boolean }>) {
     const nextScope = change.scope ?? scope
     const nextClass = change.verbClass ?? verbClass
+    const nextSource = change.source ?? source
     const nextTarget = change.target ?? target
-    const nextRule = change.ruleId ?? (change.target ? '' : ruleId)
+    const nextRule = change.ruleId ?? ((change.target || change.source) ? '' : ruleId)
     const nextWeak = change.weakOnly ?? weakOnly
     const available = verbs.filter((verb) =>
       (nextScope === 'all' || verb.level === 'core' || (nextScope === 'common' && verb.level === 'common')) &&
       (nextClass === 'all' || verb.class === nextClass) &&
-      (!nextRule || conjugate(verb, nextTarget).rule.id === nextRule) &&
+      (!nextRule || conjugate(verb, ruleForm(nextSource, nextTarget)).rule.id === nextRule) &&
       (!nextWeak || (progress.verbs[verb.id]?.attempts ?? 0) > (progress.verbs[verb.id]?.correct ?? 0) ||
-        (progress.rules[conjugate(verb, nextTarget).rule.id]?.attempts ?? 0) >
-        (progress.rules[conjugate(verb, nextTarget).rule.id]?.correct ?? 0)))
+        (progress.rules[conjugate(verb, ruleForm(nextSource, nextTarget)).rule.id]?.attempts ?? 0) >
+        (progress.rules[conjugate(verb, ruleForm(nextSource, nextTarget)).rule.id]?.correct ?? 0))
     )
-    setScope(nextScope); setVerbClass(nextClass); setSource(change.source ?? source)
+    setScope(nextScope); setVerbClass(nextClass); setSource(nextSource)
     setTarget(nextTarget); setRuleId(nextRule); setWeakOnly(nextWeak)
-    next(available, nextTarget, progress, true)
+    next(available, ruleForm(nextSource, nextTarget), progress, true)
   }
 
   function check() {
     if (!question || checked !== null || !normalize(answer)) return
     const correct = accepts(answer, question, target)
     setChecked(correct)
-    const updated = recordAnswer(progress, question, conjugate(question, target).rule.id, correct)
+    const updated = recordAnswer(progress, question, conjugate(question, ruleForm(source, target)).rule.id, correct)
     setProgress(updated)
   }
 
   const display = question ? conjugate(question, source).result : ''
   const solution = question ? conjugate(question, target) : undefined
+  const teaching = question ? conjugate(question, ruleForm(source, target)) : undefined
   const rules = useMemo(() => {
     const found = new Map<string, Verb>()
-    for (const verb of verbs) {
-      const id = conjugate(verb, target).rule.id
-      if (!found.has(id)) found.set(id, verb)
+    for (const level of ['core', 'common', 'all']) {
+      for (const verb of verbs) {
+        if (verb.level !== level) continue
+        const id = conjugate(verb, target).rule.id
+        if (!found.has(id)) found.set(id, verb)
+      }
     }
     return [...found].map(([id, verb]) => ({ id, verb, data: conjugate(verb, target) }))
   }, [target])
@@ -175,11 +195,11 @@ function App() {
               <div className="sidebar-footer"><span className="accent-spark">✳</span> All answers come from the same rule engine that powers the lessons.</div>
             </aside>
             <section className="exercise" aria-live="polite">
-              {question && solution && source !== target ? <>
+              {question && solution && teaching && source !== target ? <>
                 <div className="exercise-top"><span className="exercise-number">CONJUGATION PRACTICE</span><span className="class-pill">{classNames[question.class]}</span></div>
                 <div className="prompt"><span className="prompt-caption">CONVERT THIS VERB</span>
                   <div className="japanese-word">{display}</div>
-                  <div className="reading">{conjugateReading(question, source).result} · {question.meaning}</div>
+                  <div className="reading">{conjugateReading(question, source)} · {question.meaning}</div>
                   <div className="direction"><span>{formLabel(source)}</span><span className="direction-arrow">→</span><strong>{formLabel(target)}</strong></div>
                 </div>
                 {checked === null ? <form className="answer-area" onSubmit={(event) => { event.preventDefault(); check() }}>
@@ -188,13 +208,17 @@ function App() {
                     placeholder="Type the conjugated verb…" value={answer} onChange={(event) => setAnswer(event.target.value)} />
                     <button className="primary-button" type="submit" disabled={!normalize(answer)}>Check <span>↵</span></button></div>
                   <div className="answer-help"><span>Kanji, kana, or romaji input accepted</span><button type="button" onClick={() => setHint(true)}>Need a hint?</button></div>
-                  {hint && <div className="hint">Look at the ending: {solution.transformations[0].from} → {solution.transformations[0].to}</div>}
+                  {hint && <div className="hint">Look at the ending: {target === 'dictionary'
+                    ? `${teaching.segments.added} → ${teaching.segments.removed}`
+                    : `${teaching.segments.removed} → ${teaching.segments.added}`}</div>}
                 </form> : <div className="feedback">
                   <div className={checked ? 'feedback-heading correct' : 'feedback-heading incorrect'}>{checked ? '✓ Nicely done!' : '↗ Keep the pattern in mind'}</div>
                   {!checked && <p className="your-answer">You wrote: {answer}</p>}
-                  {source !== 'dictionary' && <div className="bridge">{display} <span>→</span> {question.expression} <span>→</span> {solution.result}</div>}
-                  <Transformation verb={question} form={target} />
-                  <p className="explanation">{solution.transformations[0].explanation}</p>
+                  {source !== 'dictionary' && target !== 'dictionary' && <div className="bridge">{display} <span>→</span> {question.expression} <span>→</span> {solution.result}</div>}
+                  {target === 'dictionary'
+                    ? <ReverseTransformation verb={question} source={source} />
+                    : <Transformation verb={question} form={target} />}
+                  <p className="explanation">{target === 'dictionary' ? 'Reverse the change to return to dictionary form. ' : ''}{teaching.rule.explanation}</p>
                   <button className="primary-button next-button" onClick={() => next()}>Next verb <span>→</span></button>
                 </div>}
                 <div className="exercise-bottom"><span><span className="dot" /> {pool.length.toLocaleString()} verbs in this set</span><span>{progress.streak} in a row <span className="accent-spark">✳</span></span></div>
@@ -235,7 +259,7 @@ function App() {
           <button className="weak-start" disabled={!weakRules.length} onClick={() => { settings({ weakOnly: true, ruleId: '', scope: 'all' }); setPage('drill') }}>Drill my weak verbs and rules →</button>
         </>}
       </main>
-      <footer><span>言 KOTOBA · VERB STUDIO</span><span>Built for the moment it finally clicks.</span><span>Dictionary form, always at the center.</span></footer>
+      <footer><span>言 KOTOBA · VERB STUDIO</span><span>Dictionary: <a href="https://www.edrdg.org/jmdict/j_jmdict.html">JMdict · EDRDG</a> · <a href="https://www.edrdg.org/edrdg/licence.html">CC BY-SA 4.0</a></span><span>Dictionary form, always at the center.</span></footer>
     </div>
   )
 }
