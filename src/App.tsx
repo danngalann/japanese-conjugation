@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { toKana } from 'wanakana'
 import { conjugate, conjugateReading, FORMS } from './conjugation'
 import type { Form, Verb } from './conjugation'
 import { verbs } from './dictionary/verbs'
 import { loadProgress, pickVerb, recordAnswer, saveProgress } from './practice/session'
+import { accepts } from './practice/validator'
 import type { Progress } from './practice/session'
 import './App.css'
 
@@ -19,12 +19,6 @@ const formLabel = (form: Form) => FORMS.find((item) => item.id === form)?.label 
 
 function normalize(value: string) {
   return value.normalize('NFKC').trim().replace(/\s+/g, '')
-}
-
-function accepts(answer: string, verb: Verb, target: Form) {
-  const input = normalize(toKana(normalize(answer)))
-  return input === normalize(conjugate(verb, target).result) ||
-    input === normalize(conjugateReading(verb, target).result)
 }
 
 function Transformation({ verb, form }: { verb: Verb; form: Form }) {
