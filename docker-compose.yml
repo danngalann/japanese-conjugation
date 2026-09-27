@@ -1,0 +1,17 @@
+services:
+  japanese-conjugation:
+    build:
+      context: .
+    image: local/japanese-conjugation:latest
+    container_name: japanese-conjugation
+    restart: unless-stopped
+    labels:
+      com.danngalann.subject: language-learning
+      com.danngalann.app: japanese-conjugation
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy

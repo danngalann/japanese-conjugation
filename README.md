@@ -29,3 +29,15 @@ node scripts/build-dictionary.mjs
 Tests cover each rule family and exception, every generated verb across all nine forms, answer validation, UI flows, and an independent comparison with `kamiya-codec` for regular て/た/ない forms. The oracle does not recognize compound 行く expressions, which are checked with curated fixtures instead. The corpus intentionally excludes verb classes that need rules this version does not implement, including ある. No arbitrary deconjugation of an unknown word is attempted: reverse exercises are generated from known dictionary entries.
 
 Run `npm run build` to produce a static site in `dist/` for any static host. Keep the JMdict-derived lexicon attribution and CC BY-SA 4.0 terms when redistributing it.
+
+## Container deployment
+
+Build and run the production site with Docker Compose:
+
+```sh
+docker compose up --build -d
+```
+
+The container serves the static application on port 80 within the external Docker `proxy` network.
+The home-server Ansible configuration publishes it through Caddy at
+`http://kotoba.lan`.
