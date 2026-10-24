@@ -1,5 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["security:only-security-updates"],
-  "automerge": false
+  "automerge": false,
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "vulnerabilityAlerts": {
+    "automerge": true
+  }
 }
