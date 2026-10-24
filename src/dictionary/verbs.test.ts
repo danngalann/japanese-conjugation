@@ -15,7 +15,7 @@ describe('generated JMdict verb lexicon', () => {
     });
     expect(verbs.find((verb) => verb.expression === '勉強する')).toMatchObject({
       reading: 'べんきょうする', class: 'suru',
-    }, 30_000);
+    });
   });
 
   it('supports every generated verb in every available conjugation form', () => {
@@ -24,5 +24,5 @@ describe('generated JMdict verb lexicon', () => {
         expect(() => conjugate(verb, form), `${verb.id}: ${verb.expression} / ${form}`).not.toThrow();
       }
     }
-  });
+  }, 30_000);
 });
